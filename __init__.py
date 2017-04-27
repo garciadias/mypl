@@ -1,1 +1,1 @@
-__all__=['mypl.py'] 
+__all__=['mypl'] 

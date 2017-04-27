@@ -1,0 +1,223 @@
+import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
+import numpy as np
+import os
+
+def mean_distances(spectra_list, clusters, assign):
+	root_path = '/scratch/Rafael/phd/apogee/apStar/spec/'
+	suffix = '_norm.npz'
+	clusters = clusters.transpose()
+	distance = np.zeros(len(clusters))
+	for i_center, center in enumerate(clusters):
+		sub_spectra_list = spectra_list[(assign == i_center)]
+		for i_spec, name in enumerate(sub_spectra_list):
+			vec_temp = np.load(''.join([root_path, name, suffix]))['norm']
+			distance[i_center] += abs(clusters[i_center] - vec_temp)
+		distance[i_center] = distance[i_center]/len(sub_spectra_list)
+	return distance
+
+def get_class(assign, data, ID_CLASS):
+	data = data[np.where(assign == ID_CLASS)[0]]
+	for i in range(len(data[0])): 
+		data = data[np.where(data[:,i] != -9999)]
+	return data
+
+def get_parms(ID_LIST, key_words=0, positions=0, refs=0):
+	if (key_words==0):
+		key_words = []
+		for i in range(6): key_words.append('FPARAM')
+		positions = [0, 1, 3, 4, 5, 6] 
+		refs = ['Teff', 'LOGG', 'MH', 'CM', 'NM', 'aM']
+		EL = ['Al', 'Ca', 'C', 'Fe', 'K', 'Mg', 'Mn', 'Na', 
+			'Ni', 'N', 'O', 'Si', 'S', 'Ti', 'V']
+		for i in range(15): 
+			positions.append(i)
+			key_words.append('ELEM')
+			refs.append(EL[i])
+	root_path = '/scratch/Rafael/phd/apogee/apStar/spec/'
+	suffix = '_parm.npz'
+	data = []
+	for name in ID_LIST:
+		vec_temp = np.load(''.join([root_path, name, suffix]))
+		line = []
+		for i, word in enumerate(key_words):
+			line.append(vec_temp[word][positions[i]])
+		data.append(line)
+	data = np.rec.fromrecords(data, names=refs)
+	return data
+
+
+def stdpl(x, y=None, sx=None, sy=None, title='', xlabel='', ylabel='', color='r', marker='o',
+		mksize=8, label='', figname=None, xlim=[None,None], ylim=[None,None], ls='',
+		width=35, height=25, xticks=20, yticks=20, legendsize=20, hist=None):
+	fig = plt.figure(figsize=(width*0.393701, height*0.393701))
+	ax = fig.add_subplot(111)
+	plt.tick_params(axis='x', which='both', labelsize=xticks)
+	plt.tick_params(axis='y', which='both', labelsize=yticks)
+	ax.set_title(title, fontsize=20)
+	ax.set_xlabel(xlabel, fontsize=30)
+	ax.set_ylabel(ylabel, fontsize=30)
+	if(xlim[0]!=None and xlim[1]!=None):
+		ax.set_xlim(xlim[0],xlim[1])
+	else:
+		xlim=[np.mean(x)-4*np.std(x), np.mean(x)+4*np.std(x)] 
+	if(ylim[0]!=None and ylim[1]!=None):
+		ax.set_ylim(ylim[0],ylim[1])
+	else:
+		ylim=[np.mean(y)-4*np.std(y), np.mean(y)+4*np.std(y)]
+	if (hist!=None or y==None):
+		plt.hist(x, label=label, color=color)
+	else:
+		plt.errorbar(x, y, sx, sy, label=label, color=color, ls=ls, marker=marker, markersize=mksize)
+	ax.legend(bbox_to_anchor=(1.1, 1.1), prop={'size':legendsize})
+	if (figname==None):
+		plt.show()
+	else:
+		plt.savefig(figname + ".pdf")
+
+def find_levels(H, N_CLASS):
+	levels = [0,0]
+	xmax = np.zeros(len(H))
+	for j in range(len(H)):
+		xmax[j] = max(H[j])
+	i_init = np.argmax(xmax)
+	j_init = np.argmax(H[i_init])
+	suma = 0; k = 0
+	while(suma < 0.6827*N_CLASS):
+		suma = np.sum(H[np.where(H >= H[i_init,j_init] - k)])
+		k +=1 
+	levels[0] = H[i_init,j_init] - k 
+	suma = 0; k = 0
+	while(suma < 0.90*N_CLASS):
+		suma = np.sum(H[np.where(H >= H[i_init,j_init] - k)])
+		k +=1 
+	levels[1] = H[i_init,j_init] - k 
+	if (levels[1] < 1): levels[1] = 1
+	return levels
+
+def contour_plot(X, Y, COLOR='red', BINS=(50,50), lw=(2.0, 0.5)):
+	H, xedges, yedges = np.histogram2d(Y, X, bins=BINS)
+	extent = [yedges[0], yedges[-1], xedges[0], xedges[-1]]
+	N_CLASS = len(X)
+	levels = find_levels(H, N_CLASS)
+	cset = plt.contour(H, levels, colors=COLOR,linewidths=lw,extent=extent)
+
+def hist_plot(DATA, nbins):
+	clusters = np.load('clusters_full.npy')
+	plt.title('Histogram of classes', fontsize=20)
+	plt.xlabel('Class number ID', fontsize=20)
+	plt.ylabel('Number of stars in class', fontsize=20)
+	plt.hist(DATA, bins=nbins); plt.show()
+
+def spectra_pile(clusters, count):
+	mask = np.loadtxt('comb_SkyTel_mask.dat')
+	mask_inv = np.zeros(len(mask))
+	x = np.ones(len(mask))*range(len(mask))
+	y0 = np.zeros(len(mask))
+	y1 = np.ones(len(mask))*12
+	for i_mask, j_mask in enumerate(mask):
+		if (j_mask == 0): mask_inv[i_mask] = 1
+	control = 0
+	j = 0
+	while  (control <= len(clusters[0])):
+		plt.title('Classes mean spectrum', fontsize=20)
+		plt.xlabel('Nth pixel', fontsize=20)
+		plt.ylabel('Norm. flux + class number', fontsize=20)
+		plt.xlim(0,9450) 
+		plt.ylim(0,12)
+		plt.xlabel('Pixel') 
+		plt.ylabel('Norm. Flux')
+		for i in range(10): 
+			try:
+				plt.plot(clusters[:,i+10*j]+(10-i), label=int(count[i+10*j]))
+				control += 1
+			except IndexError:
+				control += 1
+		j += 1
+		plt.fill_between(x,y0,y1,where=mask_inv, color='k', alpha=0.3)
+		plt.legend()
+		plt.show()
+
+def gif(data, data_stars, fileRoot):
+	mask = np.loadtxt('comb_SkyTel_mask.dat')
+	mask_inv = np.zeros(len(mask))
+	x = np.ones(len(mask))*range(len(mask))
+	y0 = np.zeros(len(mask))
+	y1 = np.ones(len(mask))*1.2
+	for i_mask, j_mask in enumerate(mask):
+		if (j_mask == 0): mask_inv[i_mask] = 1
+	assign = data['assign']
+	count = data['count']
+	count = count[np.where(count != 0)]
+	clusters = data['clusters']
+	colors = ['b', 'g', 'r', 'c', 'm', 'y', 'k']*25
+	clean = [(data_stars['LOGG'] != -9999) & (data_stars['LOGG'] != 9999)]
+	MIMLOGG, MAXLOGG = min(data_stars['LOGG'][clean]), max(data_stars['LOGG'][clean])
+	clean = [(data_stars['MH'] != -9999) & (data_stars['MH'] != 9999)]
+	MIMMC, MAXMC = min(data_stars['MH'][clean]), max(data_stars['MH'][clean])
+	clean = [(data_stars['MH'] != -9999) & (data_stars['MH'] != 9999)]
+	MIMCM, MAXCM = min(data_stars['CM'][clean]), max(data_stars['CM'][clean])
+	clean = [(data_stars['NM'] != -9999) & (data_stars['NM'] != 9999)]
+	MIMNM, MAXNM = min(data_stars['NM'][clean]), max(data_stars['NM'][clean])
+	clean = [(data_stars['aM'] != -9999) & (data_stars['aM'] != 9999)]
+	MIMalphaM, MAXalphaM = min(data_stars['aM'][clean]), max(data_stars['aM'][clean])
+	for i in range(len(count)):
+		fig = plt.figure(figsize=[18,10])
+		lista = np.where(assign == i)[0]
+		ax = fig.add_subplot(2,1,1); ax.set_xlabel('Pixel'); ax.set_ylabel('Norm. Flux'); ax.set_title('Class ' + str(i) + ' - ' + str(int(count[i])) + ' Members') 
+		plt.plot(clusters[:,i], ls='-', color=colors[i]); ax.set_ylim(0,1.2)
+		plt.fill_between(x,y0,y1,where=mask_inv, color='k', alpha=0.3)
+
+		ax = fig.add_subplot(2,5,6); ax.set_xlabel('Teff (K)'); ax.set_ylabel('$\log(g) (dex)$')
+		plt.xlim(9000,3000); ax.xaxis.set_major_formatter(ticker.FormatStrFormatter('%0.0e')); ax.xaxis.set_ticks([9000,6000,3000])
+		plt.plot(data_stars['Teff'][lista], data_stars['LOGG'][lista], ls='', marker='.', markersize=0.2, color=colors[i]); ax.set_ylim(MAXLOGG, MIMLOGG)
+		contour_plot(data_stars['Teff'][lista], data_stars['LOGG'][lista])
+
+		ax = fig.add_subplot(2,5,7); ax.set_xlabel('Teff (K)'); ax.set_ylabel('$[M/H] (dex)$')
+		plt.xlim(9000,3000); ax.xaxis.set_major_formatter(ticker.FormatStrFormatter('%0.0e')); ax.xaxis.set_ticks([9000,6000,3000])
+		plt.plot(data_stars['Teff'][lista], data_stars['MH'][lista], ls='', marker='.', markersize=0.2, color=colors[i]); ax.set_ylim(MIMMC, MAXMC)
+		contour_plot(data_stars['Teff'][lista], data_stars['MH'][lista])	
+	
+		ax = fig.add_subplot(2,5,8); ax.set_xlabel('Teff (K)'); ax.set_ylabel('$[C/M] (dex)$')
+		plt.xlim(9000,3000); ax.xaxis.set_major_formatter(ticker.FormatStrFormatter('%0.0e')); ax.xaxis.set_ticks([9000,6000,3000])
+		plt.plot(data_stars['Teff'][lista], data_stars['CM'][lista], ls='', marker='.', markersize=0.2, color=colors[i]); ax.set_ylim(MIMCM, MAXCM)
+		contour_plot(data_stars['Teff'][lista], data_stars['CM'][lista])
+
+		ax = fig.add_subplot(2,5,9); ax.set_xlabel('Teff (K)'); ax.set_ylabel('$[N/M] (dex)$')
+		plt.xlim(9000,3000); ax.xaxis.set_major_formatter(ticker.FormatStrFormatter('%0.0e')); ax.xaxis.set_ticks([9000,6000,3000])
+		plt.plot(data_stars['Teff'][lista], data_stars['NM'][lista], ls='', marker='.', markersize=0.2, color=colors[i]); ax.set_ylim(MIMNM, MAXNM)
+		contour_plot(data_stars['Teff'][lista], data_stars['NM'][lista])
+
+		ax = fig.add_subplot(2,5,10); ax.set_xlabel('Teff (K)'); ax.set_ylabel('$[alpha/M] (dex)$')
+		plt.xlim(9000,3000); ax.xaxis.set_major_formatter(ticker.FormatStrFormatter('%0.0e')); ax.xaxis.set_ticks([9000,6000,3000])
+		plt.plot(data_stars['Teff'][lista], data_stars['aM'][lista], ls='', marker='.', markersize=0.2, color=colors[i]); ax.set_ylim(MIMalphaM, MAXalphaM)
+		contour_plot(data_stars['Teff'][lista], data_stars['aM'][lista])
+	
+		fig.subplots_adjust(wspace=0.5)
+		plt.savefig('%s-%02d.png' % (fileRoot, i))
+		plt.clf()
+		plt.close()
+	command = ('convert -delay 100 -loop 0 %s* %s.gif' % (fileRoot, fileRoot))
+	os.system(command)
+
+def tex_images(image_list, outFile='figures', FRAME='', BLOCK=''):
+	out = open(outFile + '.tex', 'w')
+	for image in image_list:
+		FRAME_old, BLOCK_old = FRAME, BLOCK
+		print(image[:-1])
+		FRAME = raw_input('Frame title (%s): ' % FRAME)
+		if (FRAME == ''): FRAME = FRAME_old
+		BLOCK = raw_input('Block title (%s): ' % BLOCK)
+		if (BLOCK == ''): BLOCK = BLOCK_old
+		out.write('\n\\begin{frame}\n\t\\frametitle{%s}\n\t\\begin{block}{%s}' % (FRAME, BLOCK))
+		out.write("\n\t\t\\begin{figure}[H]\n\t\t\\centering\n\t\t\\includegraphics[width=1.0\\textwidth]{%s}" % image[:-1])
+		out.write("\n\t\t\\end{figure}\n\t\\end{block}\n\\end{frame}\n")
+	out.close()
+
+	
+
+if __name__=='__main__':
+	import numpy as np
+	x = range(100)
+	y = range(100)
+	stdpl(x,y)

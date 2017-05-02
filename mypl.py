@@ -7,6 +7,113 @@ from astropy.coordinates import SkyCoord
 from astropy import units as u
 import itertools
 from sklearn.metrics.cluster import contingency_matrix
+from scipy.ndimage.filters import gaussian_filter
+
+def creat_colours():
+    from matplotlib.colors import LinearSegmentedColormap
+    cmBlues   = LinearSegmentedColormap.from_list('Blues',  ['#dfe6eb','#c0cdd8', '#597a98', '#30597f', '#182c3f'], N=50)
+    cmReds    = LinearSegmentedColormap.from_list('Reds' ,  ['#f7e0e0','#f4d3d3', '#df7b7b', '#cb2424', '#791515'], N=50)
+    cmGreys   = LinearSegmentedColormap.from_list('Greys',  ['#e7e7e7','#888888', '#555555', '#333333', '#000000'], N=50)
+    cmPurples = LinearSegmentedColormap.from_list('Purples',['#d5bcc9','#98597a', '#7f3059', '#652647', '#321323'], N=50)
+    cmGreens  = LinearSegmentedColormap.from_list('Greens', ['#d5e5dd','#97bfaa', '#307f56', '#1c4c33', '#0e2619'], N=50)
+    cmOranges = LinearSegmentedColormap.from_list('Oranges',['#f4dfc2','#eac086', '#ffad60', '#e59b56', '#895d33'], N=50)
+    cmpink_r  = LinearSegmentedColormap.from_list('pink_r', ['#f7d2fa','#f3b4f7', '#e86af0', '#b954c0', '#6f3273'], N=50)
+    cmYlGn    = LinearSegmentedColormap.from_list('YlGn',   ['#edf3c1','#d4e266', '#c6d932', '#b8d000', '#6e7c00'], N=50)
+    Blues   ='#369af4'#597a98'
+    Reds    ='#df7b7b'
+    Greys   ='#888888'#555555'
+    Purples ='#98597a'#7f3059'
+    Greens  ='#51CC8B'#307f56'
+    Oranges ='#FD9636'#ffad60'
+    pink_r  ='#f3b4f7'#e86af0'
+    YlGn    ='#d4e266'#c6d932'
+    CMAP = {}
+    CMAP['00']= cmBlues
+    CMAP['01']= cmReds
+    CMAP['02']= cmGreys
+    CMAP['03']= cmBlues
+    CMAP['04']= cmPurples
+    CMAP['05']= cmGreens
+    CMAP['06']= cmOranges
+    CMAP['07']= cmpink_r
+    #CMAP['08']= cmGreens
+    CMAP['08']= cmYlGn
+    CMAP['09']= cmBlues
+    CMAP['10']= cmBlues
+    CMAP['11']= cmReds
+    CMAP['12']= cmReds
+    CMAP['13']= cmGreys
+    CMAP['14']= cmReds
+    CMAP['15']= cmGreys
+    CMAP['16']= cmGreys
+    CMAP['17']= cmPurples
+    CMAP['18']= cmPurples
+    CMAP['19']= cmGreens
+    CMAP['20']= cmGreens
+    CMAP['21']= cmPurples
+    CMAP['22']= cmOranges
+    CMAP['23']= cmOranges
+    #CMAP['23']= cmGreens
+    CMAP['24']= cmReds
+    CMAP['25']= cmYlGn
+    CMAP['26']= cmOranges
+    CMAP['27']= cmPurples
+    CMAP['28']= cmBlues
+    CMAP['29']= cmGreens
+    CMAP['30']= cmYlGn
+    CMAP['31']= cmBlues
+    COLOR = {}
+    COLOR['00']= Blues
+    COLOR['01']= Reds
+    COLOR['02']= Greys
+    COLOR['03']= Blues
+    COLOR['04']= Purples
+    COLOR['05']= Greens
+    COLOR['06']= Oranges
+    COLOR['07']= pink_r
+    COLOR['08']= 'y'
+    COLOR['09']= Blues
+    COLOR['10']= Blues
+    COLOR['11']= Reds
+    COLOR['12']= Reds
+    COLOR['13']= Greys
+    COLOR['14']= Reds
+    COLOR['15']= Greys
+    COLOR['16']= Greys
+    COLOR['17']= Purples
+    COLOR['18']= Purples
+    COLOR['19']= Greens
+    COLOR['20']= Greens
+    COLOR['21']= Purples
+    COLOR['22']= Oranges
+    COLOR['23']= Oranges
+    COLOR['24']= Reds
+    COLOR['25']= 'y'
+    COLOR['26']= Oranges
+    COLOR['27']= Purples
+    COLOR['28']= Blues
+    COLOR['29']= Greens
+    COLOR['30']= 'y'
+    COLOR['31']= Blues
+    COLOR['32']= Greys
+    COLOR['33']= Greys
+    COLOR['34']= Greys
+    COLOR['35']= Blues
+    COLOR['36']= Blues
+    COLOR['37']= Blues
+    COLOR['38']= Oranges
+    COLOR['39']= Oranges
+    COLOR['40']= Oranges
+    COLOR['41']= Greens
+    COLOR['42']= Greens
+    COLOR['43']= Greens
+    COLOR['44']= Reds
+    COLOR['45']= Reds
+    COLOR['46']= Reds
+    COLOR['47']= pink_r
+    COLOR['48']= pink_r
+    COLOR['49']= pink_r
+    return COLOR, CMAP
 
 def look_on_flags(flag_list, data, classes):
     STRINGS = {}
@@ -60,7 +167,7 @@ def equat_to_galatic(RA, DEC):
     b = coo_icrs.galactic.b.deg    
     return l, b
 
-def projection(ax, RA,Dec,org=0,title='Mollweide projection', projection='aitoff', s=10, marker='o', color='r', fig=None, LABEL=''):
+def projection(ax, RA,Dec,org=0,title='Mollweide projection', projection='aitoff', s=10, marker='o', color='r', fig=None, LABEL='', graph_type='scatter'):
     ''' RA, Dec are arrays of the same length.
     RA takes values in [0,360), Dec in [-90,90],
     which represent angles in degrees.
@@ -75,7 +182,18 @@ def projection(ax, RA,Dec,org=0,title='Mollweide projection', projection='aitoff
     tick_labels = np.array([150, 120, 90, 60, 30, 0, 330, 300, 270, 240, 210])
     tick_labels = np.remainder(tick_labels+360+org,360)
     #ax = plt.subplot2grid((1,1), (0,0), rowspan=1, colspan=1, projection=projection, axisbg ='LightCyan')
-    ax.scatter(np.radians(x),np.radians(Dec), s=s, marker=marker, color=color, alpha=1, label=LABEL)  # convert degrees to radians
+    if graph_type == 'scatter':
+        cs = ax.scatter(np.radians(x),np.radians(Dec), s=s, marker=marker, color=color, alpha=1, label=LABEL)  # convert degrees to radians
+    else:
+        xmin, xmax, binwidthX = min(x), max(x), (max(x)-min(x))/55.
+        ymin, ymax, binwidthY = min(Dec), max(Dec), (max(Dec)-min(Dec))/55.#0.025
+        binsX = np.arange(np.radians(xmin), np.radians(xmax), np.radians(binwidthX))
+        binsY = np.arange(np.radians(ymin), np.radians(ymax), np.radians(binwidthY))
+        H, xedges, yedges = np.histogram2d(np.radians(x), np.radians(Dec), bins=(binsX, binsY))
+        extent = [yedges[0], yedges[-1], xedges[0], xedges[-1]]
+        N_CLASS = len(x)
+        levels = np.array(find_levels(H, N_CLASS))
+        cs = plt.contourf(gaussian_filter(H.transpose(), 0.95), levels, extent=[xedges.min(), xedges.max(), yedges.min(),yedges.max()], cmap=color, alpha=1,extend='max')
     ax.set_xticklabels(tick_labels, fontsize=14)     # we add the scale on the x axis
     tick_labels = np.array([-75, -60, -45, -30, -15, 0, 15, 30, 45, 60, 75])
     #tick_labels = np.remainder(tick_labels+90+org,90)
@@ -87,7 +205,7 @@ def projection(ax, RA,Dec,org=0,title='Mollweide projection', projection='aitoff
     ax.set_ylabel("b($^o$)")
     ax.yaxis.label.set_fontsize(25)
     ax.grid(True)
-
+    return cs
 
 def Dist_clust(data):
     """Calculate the distance in flux from each spectra to its cluster and the next nearst.
@@ -612,25 +730,50 @@ def stdpl(x, y=None, sx=None, sy=None, title='', xlabel='', ylabel='', color='r'
     else:
         plt.savefig(figname + ".pdf")
 
+#   def find_levels(H, N_CLASS):
+#           levels = np.zeros(5)
+#           xmax = np.zeros(len(H))
+#           for j in range(len(H)):
+#                   xmax[j] = max(H[j])
+#           i_init = np.argmax(xmax)
+#           j_init = np.argmax(H[i_init])
+#           levels[4] = max(xmax)
+#           PORC_LEVELS= [0.68268,0.45,0.30,0.15]
+#           for i_level, PORCENTAGE in enumerate(PORC_LEVELS):
+#                   suma = 0; k = 0
+#                   while(suma < PORCENTAGE*N_CLASS):
+#                           suma = np.sum(H[np.where(H >= H[i_init,j_init] - k)])
+#                           k +=1
+#                   levels[i_level] = H[i_init,j_init] - k
+#           if (levels[0] < 1): levels[1] = 1
+#           for i in range(4):
+#                   if(levels[i] >= levels[i+1]): levels[i+1] += 0.01
+#           return levels
+#def find_levels(H, N_CLASS):
+#   h = H.flatten()
+#   S = []
+#   hs = np.sort(h)
+#   for i_value in range(len(hs)): S.append(hs[:i_value][::-1].sum())
+#   S = np.array(S)
+#   levels = []
+#   for ratio in [0.6827,0.45,0.30,0.15][::-1]: levels.append(hs[np.argmin(abs(S - ratio*S[-1]))])
+#   return np.array(levels)
+
 def find_levels(H, N_CLASS):
-        levels = np.zeros(5)
-        xmax = np.zeros(len(H))
-        for j in range(len(H)):
-                xmax[j] = max(H[j])
-        i_init = np.argmax(xmax)
-        j_init = np.argmax(H[i_init])
-        levels[4] = max(xmax)
-        PORC_LEVELS= [0.68268,0.45,0.30,0.15]
-        for i_level, PORCENTAGE in enumerate(PORC_LEVELS):
-                suma = 0; k = 0
-                while(suma < PORCENTAGE*N_CLASS):
-                        suma = np.sum(H[np.where(H >= H[i_init,j_init] - k)])
-                        k +=1
-                levels[i_level] = H[i_init,j_init] - k
-        if (levels[0] < 1): levels[1] = 1
-        for i in range(4):
-                if(levels[i] >= levels[i+1]): levels[i+1] += 0.01
-        return levels
+    h = H.flatten()
+    S = []
+    hs = np.sort(h)
+    for i_value in range(len(hs)): S.append(hs[:i_value][::-1].sum())
+    S = np.array(S)
+    levels = []
+    for ratio in [0.6827,0.45,0.30,0.15][::-1]:
+        levels.append(hs[np.argmin(abs(S - ratio*S[-1]))])
+    levels = np.array(levels)
+    for i in range(3):
+        if levels[i+1] <= levels[i]:
+            return [0]
+    return levels
+
 
 def plot_countour(Lx, Ly, assign, fparms, CLASSES=range(10)):
     ml = ['-', '--', ':', '--', '-', ':', '-', '--']
